@@ -15,10 +15,15 @@
 - [LLM 사용 전략](#llm-사용-전략)
 - [디렉토리 구조](#디렉토리-구조)
 - [설치 및 실행](#설치-및-실행)
+  - [웹 브라우저 모드](#웹-브라우저-모드)
+  - [Electron 데스크톱 앱 모드](#electron-데스크톱-앱-모드)
 - [사용 방법](#사용-방법)
 - [API 엔드포인트](#api-엔드포인트)
 - [데이터 플로우](#데이터-플로우)
 - [보안](#보안)
+- [배포](#배포)
+  - [Electron 데스크톱 앱 빌드](#electron-데스크톱-앱-빌드)
+  - [웹 애플리케이션 배포](#웹-애플리케이션-배포)
 
 ---
 
@@ -48,19 +53,27 @@
 - **진행 상태 추적**: 실시간 처리 상태 확인
 
 ### 2. AI 기반 문서 분석
-- **컨텍스트 보존**: Gemini의 큰 컨텍스트 윈도우 활용
+- **컨텍스트 보존**: Gemini의 큰 컨텍스트 윈도우 활용 (50,000자)
 - **구조화된 데이터 추출**: JSON 형태로 정보 구조화
 - **Azure AI Search 인덱싱**: 검색 최적화된 벡터 저장
+- **다중 인덱스 지원**: 여러 RAG 인덱스 선택 가능
 
 ### 3. 인수인계서 자동 생성
 - **6개 핵심 섹션**: 개요, 직무, 과제, 현황, 자료, 확인
 - **실시간 편집**: 생성된 내용을 즉시 수정 가능
 - **대화형 보완**: AI 챗봇으로 추가 정보 요청
+- **PDF 출력**: 브라우저 인쇄 기능으로 PDF 생성
 
-### 4. RAG 기반 검색
+### 4. RAG 기반 검색 및 채팅
 - **의미 기반 검색**: 벡터 임베딩으로 관련 문서 검색
 - **하이브리드 검색**: 키워드 + 벡터 검색 결합
 - **컨텍스트 인식**: 검색 결과를 바탕으로 정확한 답변 생성
+- **채팅 세션 관리**: 여러 대화 세션 저장 및 전환
+
+### 5. 데스크톱 애플리케이션
+- **Electron 기반**: React + Electron으로 크로스 플랫폼 지원
+- **독립 실행형**: Python 백엔드 자동 번들링
+- **지원 플랫폼**: Windows, macOS, Linux
 
 ---
 
@@ -117,6 +130,8 @@
 - **Vite** - 빌드 도구
 - **Tailwind CSS** - 스타일링
 - **Lucide React** - 아이콘
+- **Electron 33.4** - 데스크톱 애플리케이션
+- **Framer Motion** - 애니메이션
 
 ### 백엔드
 - **FastAPI** - 고성능 웹 프레임워크
@@ -191,22 +206,35 @@ honeypot_proto/
 ├── frontend/                     # 프론트엔드 React 애플리케이션
 │   ├── App.tsx                   # 메인 앱 컴포넌트
 │   ├── index.tsx                 # React 진입점
+│   ├── types.ts                  # TypeScript 타입 정의
+│   ├── index.css                 # 글로벌 스타일
 │   ├── components/               # UI 컴포넌트
 │   │   ├── LoginScreen.tsx       # 로그인 화면
 │   │   ├── SourceSidebar.tsx     # 파일 관리 사이드바
 │   │   ├── HandoverForm.tsx      # 인수인계서 편집 폼
-│   │   └── ChatWindow.tsx        # AI 챗봇 창
+│   │   ├── ChatWindow.tsx        # AI 챗봇 창
+│   │   └── HandoverPrintTemplate.tsx  # 인쇄/PDF 템플릿
 │   ├── services/                 # API 서비스
 │   │   ├── geminiService.ts      # 백엔드 API 호출
 │   │   └── authService.ts        # 인증 API
+│   ├── config/                   # 설정
+│   │   └── api.ts                # API 엔드포인트 설정
 │   ├── utils/                    # 유틸리티
 │   │   └── auth.ts               # 토큰 관리
-│   ├── types.ts                  # TypeScript 타입 정의
+│   ├── electron/                 # Electron 데스크톱 앱
+│   │   ├── main.js               # Electron 메인 프로세스
+│   │   ├── preload.js            # 프리로드 스크립트
+│   │   └── resources/            # 앱 리소스 (아이콘 등)
 │   ├── package.json              # NPM 의존성
-│   └── vite.config.ts            # Vite 설정
+│   ├── vite.config.ts            # Vite 설정
+│   ├── tailwind.config.ts        # Tailwind CSS 설정
+│   └── electron-builder.json     # Electron 빌드 설정
 ├── requirements.txt              # Python 의존성
+├── backend.spec                  # PyInstaller 빌드 설정
+├── build_backend.sh              # 백엔드 빌드 스크립트
 ├── proto.env                     # 환경 변수 (git ignored)
 ├── test_upload.html              # 업로드 테스트 페이지
+├── ELECTRON_GUIDE.md             # Electron 앱 가이드
 └── README.md                     # 이 문서
 ```
 
@@ -280,6 +308,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 백엔드가 `http://localhost:8000`에서 실행됩니다.
 
 ### 4. 프론트엔드 설치 및 실행
+
+#### 웹 브라우저 모드
 ```bash
 cd frontend
 
@@ -291,6 +321,19 @@ npm run dev
 ```
 
 프론트엔드가 `http://localhost:5173`에서 실행됩니다.
+
+#### Electron 데스크톱 앱 모드
+```bash
+cd frontend
+
+# 의존성 설치 (최초 1회)
+npm install
+
+# Electron 앱 실행 (백엔드는 별도 터미널에서 실행 필요)
+npm run electron:dev
+```
+
+Electron 앱이 데스크톱 창으로 실행됩니다. 자세한 내용은 [ELECTRON_GUIDE.md](./ELECTRON_GUIDE.md)를 참조하세요.
 
 ---
 
@@ -334,9 +377,16 @@ URL: http://localhost:5173
   "누락된 정보를 추가해주세요"
   ```
 
-### 5단계: 출력 및 저장
+### 5단계: 채팅 세션 관리
+- **새 대화**: 상단의 "새 대화" 버튼으로 새 세션 시작
+- **세션 전환**: 채팅 히스토리에서 이전 대화 불러오기
+- **자동 저장**: 모든 대화가 localStorage에 자동 저장
+- **다중 인덱스**: RAG 인덱스 선택으로 검색 범위 변경
+
+### 6단계: 출력 및 저장
 - 하단 **"리포트 출력 및 PDF 저장"** 버튼으로 PDF 생성
 - 브라우저의 인쇄 기능 활용
+- HandoverPrintTemplate으로 전문적인 레이아웃 적용
 
 ---
 
@@ -407,6 +457,41 @@ Response:
       "content_length": 1234
     }
   ]
+}
+```
+
+### RAG 인덱스 목록 조회
+```http
+GET /api/upload/indexes
+Authorization: Bearer <token>
+
+Response:
+{
+  "count": 3,
+  "indexes": [
+    {
+      "name": "documents-index",
+      "fields_count": 5
+    },
+    {
+      "name": "code-index",
+      "fields_count": 4
+    }
+  ]
+}
+```
+
+### 시스템 통계 조회
+```http
+GET /api/upload/stats?index_name=documents-index
+Authorization: Bearer <token>
+
+Response:
+{
+  "total_documents": 42,
+  "recent_uploads": 42,
+  "status": "✅ Active",
+  "index_name": "documents-index"
 }
 ```
 
@@ -644,7 +729,44 @@ pip install -r requirements.txt --force-reinstall
 
 ## 🚀 배포
 
-### Azure App Service (예정)
+### Electron 데스크톱 앱 빌드
+
+#### 1단계: Python 백엔드 빌드
+```bash
+# 프로젝트 루트에서
+./build_backend.sh
+```
+
+이 스크립트는:
+- PyInstaller로 Python 백엔드를 독립 실행 파일로 빌드
+- `dist/backend` 생성
+- 빌드된 파일을 `frontend/electron/resources/backend/`로 복사
+
+#### 2단계: Electron 앱 패키징
+```bash
+cd frontend
+
+# 프론트엔드 빌드
+npm run build
+
+# Electron 앱 패키징
+npm run electron:build
+```
+
+빌드된 앱은 `frontend/release/` 디렉토리에 생성됩니다.
+
+**지원 플랫폼**:
+- Windows: `.exe` (NSIS 인스톨러)
+- macOS: `.dmg`
+- Linux: `.AppImage`, `.deb`
+
+자세한 내용은 [ELECTRON_GUIDE.md](./ELECTRON_GUIDE.md)를 참조하세요.
+
+---
+
+### 웹 애플리케이션 배포
+
+#### Azure App Service
 ```bash
 # 백엔드 배포
 az webapp up --name honeypot-backend --resource-group honeypot-rg
@@ -655,7 +777,7 @@ npm run build
 az storage blob upload-batch --account-name honeypot --destination '$web' --source ./dist
 ```
 
-### Docker (예정)
+#### Docker
 ```dockerfile
 # Dockerfile
 FROM python:3.10-slim
@@ -676,6 +798,8 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - [ ] 버전 관리 및 히스토리
 - [ ] 이메일 알림 (인계 완료 시)
 - [ ] 모바일 반응형 개선
+- [ ] ✅ **Electron 데스크톱 앱** (완료)
+- [ ] 자동 업데이트 (electron-updater)
 
 ### 기술
 - [ ] Redis 캐싱 (세션, 검색 결과)
@@ -683,12 +807,15 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - [ ] WebSocket (실시간 업데이트)
 - [ ] Kubernetes 배포
 - [ ] CI/CD 파이프라인 (GitHub Actions)
+- [ ] ✅ **채팅 세션 관리** (완료)
+- [ ] ✅ **다중 RAG 인덱스 지원** (완료)
 
 ### 보안
 - [ ] MFA (다중 인증)
 - [ ] API Rate Limiting
 - [ ] 감사 로그 (Azure Monitor)
 - [ ] 민감 정보 마스킹
+- [ ] ✅ **JWT 인증 및 토큰 만료 관리** (완료)
 
 ---
 
