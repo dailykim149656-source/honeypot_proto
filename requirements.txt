@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-dotenv
+azure-storage-blob
+azure-ai-formrecognizer
+azure-search-documents
+openai
+python-multipart
+PyJWT

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure AI Search 업로드 테스트</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { border: 1px solid #ddd; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; }
+        .file-input-group { margin-bottom: 20px; }
+        #file-list { margin-top: 20px; }
+        .file-item { border: 1px solid #eee; padding: 10px; margin-bottom: 10px; border-radius: 4px; display: flex; align-items: center; justify-content: space-between; }
+        .file-info { flex: 1; }
+        .file-name { font-weight: bold; }
+        .progress-bar { width: 100%; height: 20px; background-color: #f0f0f0; border-radius: 10px; overflow: hidden; margin-top: 5px; }
+        .progress-fill { height: 100%; background-color: #3498db; width: 0%; transition: width 0.3s ease; text-align: center; color: white; font-size: 12px; line-height: 20px; }
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; min-width: 80px; text-align: center; }
+        .status-pending { background-color: #f1c40f; color: #fff; }
+        .status-processing { background-color: #3498db; color: #fff; }
+        .status-completed { background-color: #2ecc71; color: #fff; }
+        .status-failed { background-color: #e74c3c; color: #fff; }
+        button { background-color: #2c3e50; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #34495e; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        .log-area { font-family: monospace; font-size: 12px; color: #666; margin-top: 5px; max-height: 60px; overflow-y: auto; background: #f9f9f9; padding: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📑 문서 업로드 및 AI Search 인덱싱 테스트</h1>
+        <p>여러 파일을 선택하여 Azure AI Search 파이프라인(Blob -> Text -> LLM -> Search)을 테스트합니다.</p>
+        
+        <div class="file-input-group">
+            <input type="file" id="files" multiple>
+            <button onclick="uploadFiles()" id="uploadBtn">업로드 시작</button>
+        </div>
+
+        <div id="file-list"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000/api/upload'; 
+
+        async function uploadFiles() {
+            const fileInput = document.getElementById('files');
+            const fileListDiv = document.getElementById('file-list');
+            const files = fileInput.files;
+
+            if (files.length === 0) {
+                alert('파일을 선택해주세요.');
+                return;
+            }
+
+            document.getElementById('uploadBtn').disabled = true;
+
+            // UI 초기화
+            fileListDiv.innerHTML = '';
+            
+            // 각 파일별로 업로드 처리
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const fileId = `file-${i}`;
+                
+                // UI 요소 생성
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <div class="file-name">${file.name}</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-${fileId}">0%</div>
+                        </div>
+                        <div class="log-area" id="log-${fileId}">대기 중...</div>
+                    </div>
+                    <span class="status-badge status-pending" id="status-${fileId}">Pending</span>
+                `;
+                fileListDiv.appendChild(fileItem);
+
+                // 개별 파일 업로드 실행 (병렬 처리를 원하면 Promise.all 등을 사용, 여기서는 순차적 시작)
+                uploadSingleFile(file, fileId);
+            }
+        }
+
+        async function uploadSingleFile(file, fileId) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const statusBadge = document.getElementById(`status-${fileId}`);
+            const progressBar = document.getElementById(`progress-${fileId}`);
+            const logArea = document.getElementById(`log-${fileId}`);
+
+            try {
+                logArea.textContent = "업로드 요청 중...";
+                
+                const response = await fetch(`${API_BASE_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Upload failed: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const taskId = data.task_id;
+                
+                logArea.textContent = `작업 시작 (Task ID: ${taskId})`;
+                pollStatus(taskId, fileId);
+
+            } catch (error) {
+                console.error(error);
+                statusBadge.className = 'status-badge status-failed';
+                statusBadge.textContent = 'Error';
+                logArea.textContent = `에러: ${error.message}`;
+            }
+        }
+
+        async function pollStatus(taskId, fileId) {
+            const statusBadge = document.getElementById(`status-${fileId}`);
+            const progressBar = document.getElementById(`progress-${fileId}`);
+            const logArea = document.getElementById(`log-${fileId}`);
+
+            const intervalId = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/status/${taskId}`);
+                    if (!response.ok) {
+                        throw new Error("Status check failed");
+                    }
+
+                    const task = await response.json();
+                    
+                    // UI 업데이트
+                    progressBar.style.width = `${task.progress}%`;
+                    progressBar.textContent = `${task.progress}%`;
+                    logArea.textContent = task.message;
+
+                    // 상태에 따른 처리
+                    if (task.status === 'completed' || task.status === 'completed_with_warning') {
+                        clearInterval(intervalId);
+                        statusBadge.className = 'status-badge status-completed';
+                        statusBadge.textContent = 'Completed';
+                        checkAllCompleted();
+                    } else if (task.status === 'failed') {
+                        clearInterval(intervalId);
+                        statusBadge.className = 'status-badge status-failed';
+                        statusBadge.textContent = 'Failed';
+                        checkAllCompleted();
+                    } else {
+                        statusBadge.className = 'status-badge status-processing';
+                        statusBadge.textContent = 'Processing';
+                    }
+
+                } catch (error) {
+                    console.error(error);
+                    clearInterval(intervalId);
+                    statusBadge.className = 'status-badge status-failed';
+                    statusBadge.textContent = 'Net Error';
+                }
+            }, 1000); // 1초마다 폴링
+        }
+
+        function checkAllCompleted() {
+            // 모든 작업이 끝났는지 확인 (단순 구현: 버튼 활성화)
+            // 실제로는 진행 중인 작업 카운트를 세는 것이 더 정확함
+            const pending = document.querySelectorAll('.status-processing, .status-pending');
+            if (pending.length === 0) {
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
+
