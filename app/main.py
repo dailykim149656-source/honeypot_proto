@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from app.routers import upload, chat, auth  # ← 추가: auth import
+from app.routers import upload, chat, auth, pdf  # ← 추가: pdf import
 from app.config import validate_config
 import os
 
@@ -64,10 +64,11 @@ def root():
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
-# 라우터 포함 (auth 추가)
+# 라우터 포함
 app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
-app.include_router(auth.router)  # ← 추가
+app.include_router(auth.router)
+app.include_router(pdf.router, tags=["PDF"])  # ← PDF 라우터 추가
 
 
 # Health check endpoint

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { HandoverData } from "../types.ts";
 import { HandoverPrintTemplate } from "./HandoverPrintTemplate";
+import { API_ENDPOINTS } from "../config/api";
 import {
   FileText,
   Users,
@@ -164,8 +165,35 @@ const HandoverForm: React.FC<Props> = ({ data, onUpdate }) => {
     }
   };
 
-  const handleExportPDF = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    try {
+      // 백엔드 API 호출
+      const response = await fetch(API_ENDPOINTS.GENERATE_PDF, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error("PDF 생성 실패");
+      }
+
+      // PDF 다운로드
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `handover_${new Date().toISOString().split("T")[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("PDF 생성 오류:", error);
+      alert("PDF 생성에 실패했습니다.");
+    }
   };
 
   return (
@@ -960,7 +988,7 @@ const HandoverForm: React.FC<Props> = ({ data, onUpdate }) => {
 
             <div className="flex gap-4 pb-8">
               <button
-                onClick={() => window.print()}
+                onClick={handleExportPDF}
                 className="flex-1 py-6 bg-yellow-400 text-white rounded-[1.5rem] font-black text-sm shadow-xl hover:bg-yellow-500 hover:scale-[1.02] transition-all flex items-center justify-center gap-3 group/btn"
               >
                 <Printer className="w-5 h-5 group-hover/btn:animate-bounce" />

@@ -9,3 +9,4 @@ python-multipart
 PyJWT
 python-docx
 azure-identity
+weasyprint

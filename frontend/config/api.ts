@@ -43,6 +43,9 @@ export const API_ENDPOINTS = {
   CHAT: `${API_BASE_URL}/api/chat`,
   ANALYZE: `${API_BASE_URL}/api/analyze`,
 
+  // PDF 생성
+  GENERATE_PDF: `${API_BASE_URL}/api/generate-pdf`,
+
   // 헬스체크
   HEALTH: `${API_BASE_URL}/api/health`,
 };
