@@ -1,13 +1,17 @@
 # app/routers/chat.py
 
 from fastapi import APIRouter, HTTPException, Depends, Request  # ← Request 추가!
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.services.search_service import search_documents
 from app.services.openai_service import chat_with_context, analyze_files_for_handover
 from app.auth import get_current_user  # ← 추가 (한 줄)
 import json
 import traceback
+from datetime import datetime
 from app.routers.auth import verify_csrf_token, verify_token
+from app.services.pdf_service import create_handover_pdf, save_pdf_to_blob
+import io
 
 router = APIRouter()
 
@@ -21,6 +25,10 @@ class ChatRequest(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     messages: list
+
+class GeneratePDFRequest(BaseModel):
+    handover_data: dict
+    save_to_blob: bool = False  # Blob에 저장할지 여부
 
 # ===== 변경 1: analyze 함수 =====
 @router.post("/analyze")
@@ -162,3 +170,62 @@ async def chat(
         print(f"❌ Chat error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/generate-pdf")
+async def generate_pdf(
+    request: Request,
+    pdf_request: GeneratePDFRequest,
+    user: dict = Depends(get_current_user)
+):
+    """
+    인수인계서 데이터를 받아 PDF 파일을 생성하고 다운로드 또는 Blob 저장
+    """
+    try:
+        # CSRF 검증
+        csrf_token = request.headers.get("X-CSRF-Token")
+        if not csrf_token:
+            raise HTTPException(
+                status_code=403,
+                detail="CSRF Token이 필요합니다."
+            )
+        verify_csrf_token(csrf_token, user['email'])
+
+        # 사용자 정보 로깅
+        print(f"📄 [{user['name']}] PDF 생성 요청 - save_to_blob: {pdf_request.save_to_blob}")
+
+        # PDF 생성
+        pdf_bytes = create_handover_pdf(pdf_request.handover_data)
+        print(f"✅ PDF 생성 완료 - 크기: {len(pdf_bytes)} bytes")
+
+        # Blob에 저장하는 경우
+        if pdf_request.save_to_blob:
+            # 파일명 생성 (사용자명_날짜_시간.pdf)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"handover_{user['email'].split('@')[0]}_{timestamp}.pdf"
+
+            # Blob에 저장
+            blob_url = save_pdf_to_blob(pdf_bytes, filename, user['email'])
+            print(f"✅ PDF Blob 저장 완료 - URL: {blob_url}")
+
+            return {
+                "success": True,
+                "message": "PDF가 성공적으로 생성되어 저장되었습니다.",
+                "blob_url": blob_url,
+                "filename": filename,
+                "size": len(pdf_bytes)
+            }
+        else:
+            # 직접 다운로드
+            return StreamingResponse(
+                io.BytesIO(pdf_bytes),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=handover_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                }
+            )
+
+    except Exception as e:
+        print(f"❌ PDF 생성 에러: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"PDF 생성 중 오류가 발생했습니다: {str(e)}")
